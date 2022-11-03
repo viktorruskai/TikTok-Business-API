@@ -1,18 +1,23 @@
 {
-    "name": "socialiteproviders/tiktok",
-    "description": "TikTok (tiktok.com) OAuth2 Provider for Laravel Socialite",
+    "name": "viktorruskai/tiktok-business-api",
+    "description": "TikTok Business API (tiktok.com) OAuth2 Provider for Laravel Socialite",
     "license": "MIT",
     "keywords": [
         "laravel",
         "oauth",
         "provider",
         "socialite",
-        "tiktok"
+        "tiktok",
+        "tiktok-business-api"
     ],
     "authors": [
         {
             "name": "Thomas Banks",
             "email": "thomas@tombanks.me"
+        },
+        {
+            "name": "Viktor Ruskai",
+            "email": "viktor@ruskai.com"
         }
     ],
     "support": {
@@ -22,7 +27,12 @@
     },
     "require": {
         "php": "^7.4 || ^8.0",
-        "socialiteproviders/manager": "~4.0"
+        "socialiteproviders/manager": "~4.0",
+        "ext-json": "*"
+    }
+    ,
+    "require-dev": {
+        "roave/security-advisories": "dev-latest"
     },
     "autoload": {
         "psr-4": {

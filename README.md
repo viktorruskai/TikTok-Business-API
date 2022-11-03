@@ -1,7 +1,7 @@
-# TikTok
+# TikTok Business API for [Socialite Providers](https://github.com/SocialiteProviders)
 
 ```bash
-composer require socialiteproviders/tiktok
+composer require viktorruskai/tiktok-business-api
 ```
 
 ## Installation & Basic Usage
@@ -44,7 +44,7 @@ return Socialite::driver('tiktok')->redirect();
 # Returned User Fields
 
 - id
-- union_id
+- nickname
 - name
 - avatar
 

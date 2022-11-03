@@ -2,7 +2,10 @@
 
 namespace SocialiteProviders\TikTok;
 
+use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\RequestOptions;
 use Illuminate\Support\Arr;
+use JsonException;
 use Laravel\Socialite\Two\InvalidStateException;
 use SocialiteProviders\Manager\OAuth2\AbstractProvider;
 use SocialiteProviders\Manager\OAuth2\User;
@@ -10,6 +13,21 @@ use SocialiteProviders\Manager\OAuth2\User;
 class Provider extends AbstractProvider
 {
     public const IDENTIFIER = 'TIKTOK';
+
+    /**
+     * The base TikTok Business URL.
+     */
+    protected string $url = 'https://business-api.tiktok.com/open_api/';
+
+    /**
+     * The TikTok API version for the request.
+     */
+    protected string $version = 'v1.3';
+
+    /**
+     * The user fields being requested.
+     */
+    protected array $fields = ['username', 'display_name', 'profile_image'];
 
     /**
      * {@inheritdoc}
@@ -28,13 +46,13 @@ class Provider extends AbstractProvider
      */
     protected function getAuthUrl($state)
     {
-        return 'https://open-api.tiktok.com/platform/oauth/connect?'.http_build_query([
-            'client_key'    => $this->clientId,
-            'state'         => $state,
-            'response_type' => 'code',
-            'scope'         => $this->formatScopes($this->getScopes(), $this->scopeSeparator),
-            'redirect_uri'  => $this->redirectUrl,
-        ]);
+        return 'https://open-api.tiktok.com/platform/oauth/connect?' . http_build_query([
+                'client_key' => $this->clientId,
+                'state' => $state,
+                'response_type' => 'code',
+                'scope' => $this->formatScopes($this->getScopes(), $this->scopeSeparator),
+                'redirect_uri' => $this->redirectUrl,
+            ]);
     }
 
     /**
@@ -52,60 +70,64 @@ class Provider extends AbstractProvider
 
         $response = $this->getAccessTokenResponse($this->getCode());
 
-        $token = Arr::get($response, 'data.access_token');
+        $token = Arr::get($response, 'access_token');
 
-        $this->user = $this->mapUserToObject(
-            $this->getUserByToken([
-                'access_token' => $token,
-                'open_id'      => Arr::get($response, 'data.open_id'),
-            ])
-        );
+        $this->user = $this->mapUserToObject($this->getUserByToken([
+            'accessToken' => $token,
+            'creatorId' => Arr::get($response, 'creator_id'),
+        ]));
 
         return $this->user->setToken($token)
-            ->setExpiresIn(Arr::get($response, 'data.expires_in'))
-            ->setRefreshToken(Arr::get($response, 'data.refresh_token'))
-            ->setApprovedScopes(explode($this->scopeSeparator, Arr::get($response, 'data.scope', '')));
+            ->setExpiresIn(Arr::get($response, 'expires'))
+            ->setRefreshToken(Arr::get($response, 'refresh_token'))
+            ->setApprovedScopes(explode($this->scopeSeparator, Arr::get($response, 'scope', '')));
     }
 
     /**
      * {@inheritdoc}
+     *
+     * @see https://ads.tiktok.com/marketing_api/docs?id=1738084387220481
      */
     public function getTokenUrl()
     {
-        return 'https://open-api.tiktok.com/oauth/access_token/';
+        return $this->url . $this->version . '/oauth2/creator_token/';
     }
 
     /**
      * {@inheritdoc}
+     *
+     * @see https://ads.tiktok.com/marketing_api/docs?id=1738084387220481
      */
     protected function getTokenFields($code)
     {
         return [
-            'client_key'    => $this->clientId,
+            'business' => 'tt_user',
+            'client_id' => $this->clientId,
             'client_secret' => $this->clientSecret,
-            'code'          => $code,
-            'grant_type'    => 'authorization_code',
+            'grant_type' => 'authorization_code',
+            'auth_code' => $code,
         ];
     }
 
     /**
-     * Get TikTok user by token.
+     * Return Business Account (User) by token
      *
      * @param array $data
      *
-     * @return mixed
+     * @throws JsonException
+     * @throws GuzzleException
      */
     protected function getUserByToken($data)
     {
-        // Note: The TikTok api does not have an endpoint to get a user by the access
-        // token only. Open id is also required therefore:
-        // $data['access_token'] = $token, $data['open_id'] = $open_id
+        $response = $this->getHttpClient()->get($this->url . $this->version . '/business/get/', [
+            RequestOptions::HEADERS => ['Authorization' => 'Bearer ' . $data['accessToken']],
+            RequestOptions::QUERY => [
+                'business_id' => $data['creatorId'],
+                'fields' => '["' . implode('","', $this->fields) . '"]',
+            ],
+        ]);
 
-        $response = $this->getHttpClient()->get(
-            'https://open-api.tiktok.com/oauth/userinfo?'.http_build_query($data)
-        );
-
-        return json_decode((string) $response->getBody(), true);
+        return json_decode((string)$response->getBody(), true, 512, JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -116,10 +138,21 @@ class Provider extends AbstractProvider
         $user = $user['data'];
 
         return (new User())->setRaw($user)->map([
-            'id'       => $user['open_id'],
-            'union_id' => $user['union_id'],
-            'name'     => $user['display_name'],
-            'avatar'   => $user['avatar_larger'],
+            'id' => $user['username'],
+            'nickname' => $user['username'],
+            'name' => $user['display_name'],
+            'email' => null,
+            'avatar' => $user['profile_image'],
         ]);
+    }
+
+    /**
+     * Set the user fields to request from TikTok.
+     */
+    public function fields(array $fields): Provider
+    {
+        $this->fields = $fields;
+
+        return $this;
     }
 }
